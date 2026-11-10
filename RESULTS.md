@@ -161,4 +161,4 @@ The glob is `src/game/realm-lifecycle.test.ts` and `src/game/end-card.test.ts`.
 - pass 17
 - fail 0
 
-Stickhold split commit: filled in by the following commit (this commit cannot name its own hash).
+Stickhold split commit: `770a9daf7b38a5326f19554d089e3c36faeea50f`
