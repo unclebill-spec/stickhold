@@ -176,3 +176,223 @@ describe("match reset", () => {
 		assert.deepEqual(realm.stock[realm.playerTeam], { food: 200, wood: 200, gold: 80, stone: 50 });
 	});
 });
+
+function tale(seed = 11) {
+	const realm = skirmish(seed);
+	realm.rpg = true;
+	realm.mapSpan = 108;
+	return realm;
+}
+
+function unitSig(units) {
+	return units.map((u) => ({ id: u.id, kind: u.kind, team: u.team, x: u.x, y: u.y, hp: u.hp }));
+}
+
+function installMemoryStorage() {
+	const mem = new Map();
+	const store = {
+		getItem(key) {
+			return mem.has(key) ? mem.get(key) : null;
+		},
+		setItem(key, value) {
+			mem.set(String(key), String(value));
+		},
+		removeItem(key) {
+			mem.delete(String(key));
+		},
+		clear() {
+			mem.clear();
+		},
+		key(index) {
+			return [...mem.keys()][index] ?? null;
+		},
+		get length() {
+			return mem.size;
+		},
+	};
+	const had = Object.prototype.hasOwnProperty.call(globalThis, "localStorage");
+	const prev = globalThis.localStorage;
+	globalThis.localStorage = store;
+	return {
+		mem,
+		restore() {
+			if (had) globalThis.localStorage = prev;
+			else delete globalThis.localStorage;
+		},
+	};
+}
+
+function standOnPad(realm, originX, originY) {
+	const cx = originX + 1.5;
+	const cy = originY + 1.5;
+	let best = null;
+	let bestD = Infinity;
+	for (let y = originY - 1; y <= originY + 3; y++) {
+		for (let x = originX - 1; x <= originX + 3; x++) {
+			if (!realm.walkable(x, y)) continue;
+			const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+			if (d < bestD) {
+				bestD = d;
+				best = { x: x + 0.5, y: y + 0.5, tx: x, ty: y };
+			}
+		}
+	}
+	return best;
+}
+
+describe("tale fate", () => {
+	it("starts a tale with one player hall, a hero, and tale progress", () => {
+		const realm = tale(11);
+		realm.start();
+		const halls = realm.buildings.filter((b) => b.kind === "townhall");
+		assert.equal(halls.length, 1);
+		assert.equal(halls[0].team, realm.playerTeam);
+		assert.equal(realm.buildings.some((b) => b.team === realm.foeTeam() && b.kind === "townhall"), false);
+		const hero = realm.units.find((u) => u.team === realm.playerTeam && u.kind === "hero" && u.hp > 0);
+		assert.ok(hero);
+		assert.ok(realm.tale);
+		assert.equal(typeof realm.tale.need, "number");
+		assert.equal(realm.phase, "play");
+	});
+
+	it("wins a tale when boss nodes are dead and nobody is waiting", () => {
+		const realm = tale(11);
+		realm.start();
+		const bosses = realm.bossNodes();
+		assert.ok(bosses.length > 0, "seed 11 tale has boss nodes");
+		for (const node of bosses) {
+			node.alive = false;
+			assert.ok(node.amount > 0);
+		}
+		for (const unit of realm.units) {
+			unit.captive = false;
+			if (unit.rescued) unit.settled = true;
+		}
+		const waiting = realm.units.some((u) => u.hp > 0 && (u.captive || (u.rescued && !u.settled)));
+		assert.equal(waiting, false);
+		assert.ok(realm.bossNodes().length > 0);
+		assert.ok(realm.bossNodes().every((n) => !n.alive));
+		realm.rpgFate();
+		assert.equal(realm.phase, "win");
+		const toast = realm.tale?.need
+			? "Your people are home. The wild is yours."
+			: "The wild is clear. The champion stands.";
+		assert.equal(realm.toast, toast);
+	});
+
+	it("loses a tale when the hero is gone, heroFallen is set, and the altar is gone", () => {
+		const realm = tale(11);
+		realm.start();
+		assert.equal(realm.phase, "play");
+		assert.ok(realm.bossNodes().some((n) => n.alive));
+		const hero = realm.units.find((u) => u.team === realm.playerTeam && u.kind === "hero");
+		assert.ok(hero);
+		assert.ok(realm.buildings.some((b) => b.team === realm.playerTeam && b.kind === "altar" && b.hp > 0));
+		realm.units = realm.units.filter((u) => u.id !== hero.id);
+		realm.buildings = realm.buildings.filter((b) => !(b.team === realm.playerTeam && b.kind === "altar"));
+		realm.heroFallen[realm.playerTeam] = { level: 1, xp: 0 };
+		realm.rpgFate();
+		assert.equal(realm.phase, "lose");
+		assert.equal(realm.toast, "The champion is gone, and the altar with them.");
+	});
+});
+
+describe("same-step halls", () => {
+	it("a same-step trade of both town halls is a loss", () => {
+		const realm = skirmish(11);
+		realm.start();
+		const halls = realm.buildings.filter((b) => b.kind === "townhall");
+		assert.deepEqual(halls.map((b) => b.team), [realm.playerTeam, realm.foeTeam()]);
+		for (const hall of halls) hall.hp = 0;
+		realm.reap();
+		assert.equal(realm.phase, "lose");
+		assert.equal(realm.toast, "Your town hall is lost.");
+		assert.equal(realm.buildings.some((b) => b.kind === "townhall"), false);
+	});
+});
+
+describe("save and load", () => {
+	it("restores a 54-map save from an in-memory localStorage", () => {
+		const stub = installMemoryStorage();
+		try {
+			const realm = skirmish(11);
+			realm.mapSpan = 54;
+			realm.start();
+			assert.equal(realm.tiles.length, 54 * 54);
+			assert.equal(realm.phase, "play");
+			const before = unitSig(realm.units);
+			assert.ok(before.length > 0);
+			assert.equal(realm.saveGame(1), true);
+			const raw = stub.mem.get("stickhold-save");
+			assert.equal(typeof raw, "string");
+			const data = JSON.parse(raw);
+			assert.equal(data.terrain.length, 54 * 54);
+			realm.units = [];
+			realm.phase = "menu";
+			assert.equal(realm.loadGame(1), true);
+			assert.equal(realm.phase, "play");
+			assert.equal(realm.tiles.length, 54 * 54);
+			assert.equal(realm.mapSpan, 54);
+			assert.deepEqual(unitSig(realm.units), before);
+		} finally {
+			stub.restore();
+		}
+	});
+
+	it("records save payload size for 216 and 432", { timeout: 180000 }, () => {
+		const stub = installMemoryStorage();
+		try {
+			const recorded = [];
+			for (const span of [216, 432]) {
+				const realm = skirmish(11);
+				realm.mapSpan = span;
+				realm.start();
+				assert.equal(realm.tiles.length, span * span);
+				const saved = realm.saveGame(1);
+				const raw = stub.mem.get("stickhold-save") || "";
+				const bytes = Buffer.byteLength(raw);
+				let terrain = 0;
+				if (raw) terrain = JSON.parse(raw).terrain?.length ?? 0;
+				recorded.push({ span, saved, bytes, terrain });
+				assert.equal(typeof saved, "boolean");
+				if (saved) {
+					assert.equal(terrain, span * span);
+					assert.equal(bytes > span * span, true);
+				}
+			}
+			assert.equal(recorded.length, 2);
+		} finally {
+			stub.restore();
+		}
+	});
+});
+
+describe("findPath pads", () => {
+	const known = {
+		54: { from: [34, 32], to: [10, 8], length: 29 },
+		108: { from: [67, 65], to: [19, 17], length: 55 },
+	};
+	for (const span of [54, 108]) {
+		it(`seed 11 finds a path from the south pad to the north pad on ${span}`, () => {
+			const realm = skirmish(11);
+			realm.mapSpan = span;
+			realm.start();
+			const south = standOnPad(realm, realm.scaleN(66), realm.scaleN(66));
+			const north = standOnPad(realm, realm.scaleN(18), realm.scaleN(18));
+			assert.ok(south, "south pad has a walkable cell");
+			assert.ok(north, "north pad has a walkable cell");
+			const path = realm.findPath(south.x, south.y, north.x, north.y, null, null);
+			assert.ok(Array.isArray(path));
+			const expect = known[span];
+			assert.deepEqual([south.tx, south.ty], expect.from);
+			assert.deepEqual([north.tx, north.ty], expect.to);
+			assert.equal(path.length, expect.length);
+			for (const point of path) {
+				assert.equal(typeof point.x, "number");
+				assert.equal(typeof point.y, "number");
+			}
+			assert.equal(path[path.length - 1].x, north.x);
+			assert.equal(path[path.length - 1].y, north.y);
+		});
+	}
+});

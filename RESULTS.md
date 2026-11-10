@@ -1,0 +1,114 @@
+# Stickhold paper-only results
+
+Baseline (unamended): `836eff6d075db82ffef74032a8644d5dceb811ab`
+
+Working copy: `/workspace/stickhold-fix-20261110`
+
+Node v24.22.1. No package install. No server. No browser. The headless loader is `scripts/ts-ext-register.mjs` (resolves extensionless relative imports to `.ts`). `AudioContext` is not constructed. `ensureAudio` returns when `window` is missing.
+
+Test command:
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/realm-lifecycle.test.ts
+```
+
+## Option A
+
+Shared match reset is `Realm.beginMatch`, used by `start()` and `restart()`. `restart()` still rolls `Math.random() * 99999 | 0` and then calls that path. `start()` keeps the current seed. `loadGame` was not pointed at `beginMatch`.
+
+Commit: `89b4b10a5c67f4b642e036353f071b17b49dbda7`
+
+### Before the engine change
+
+Command above, against baseline reset behavior (loader and `src/game/realm-lifecycle.test.ts` only).
+
+- tests 4
+- pass 1
+- fail 3
+
+Failures were the two bugs:
+
+- same-size Skirmish `start()` left `time` at 90 (match progress and the previous world were kept)
+- `restart()` left `tech.structure` at 2 on normal difficulty
+- Insanity `restart()` left `tech.structure` at 2
+
+The North pad test passed on the baseline. A `playerTeam === 0` generate already puts team 1's town hall on `scaleN(18), scaleN(18)`, so choosing North without regenerating still finds that hall. The assertion stays as a guard that a regenerated North match keeps the player hall on that pad and the team 0 hall on `scaleN(66), scaleN(66)`.
+
+### After the engine change
+
+Same command. Re-run in this session before the Option A commit, still green.
+
+- tests 4
+- pass 4
+- fail 0
+
+## Option B
+
+Coverage only. `src/game/engine.ts` was not changed in this step. Items 1-3 stay in the original four tests. Items 4-7 were added to `src/game/realm-lifecycle.test.ts`.
+
+Same command, after the coverage tests:
+
+- tests 12
+- pass 12
+- fail 0
+
+Commit: filled in by the next commit (this coverage commit cannot name its own hash).
+
+### Item 4 — Tale `rpgFate`
+
+`start()` with `rpg` true on span 108, seed 11:
+
+- one town hall, on the player team; the foe team has none
+- a living player hero
+- `tale` is set
+- phase `"play"`
+
+Win: every `bossNodes()` entry set `alive` false while `amount > 0` (dead bosses with amount 0 drop out of `bossNodes()`, and `bossesDown` requires a non-empty list), captives cleared, rescued units settled. `rpgFate()` then sets phase `"win"`. Toast follows `tale.need`: `"Your people are home. The wild is yours."` when `need` is set, otherwise `"The wild is clear. The champion stands."`
+
+Lose: hero unit removed, player altar removed, `heroFallen[playerTeam]` set to `{ level: 1, xp: 0 }` (the lose branch requires that flag, not only a missing hero). Bosses still alive so the win branch does not return first. `rpgFate()` sets phase `"lose"` and toast `"The champion is gone, and the altar with them."`
+
+### Item 5 — same-step halls
+
+Skirmish seed 11, span 108, South. Both town halls set to 0 HP, then one `reap()`. Phase is `"lose"`. Toast is `"Your town hall is lost."` Both halls are removed from `buildings`.
+
+`reap()` keeps the phase of the first dead town hall because it only assigns a phase while `phase === "play"`. `generate` adds the player's hall before the foe's, so a same-step trade is a loss. `reap()` was not changed.
+
+### Item 6 — save / load
+
+In-memory `localStorage` on `globalThis`, installed for the test and removed in `finally`.
+
+Span 54, seed 11: `saveGame(1)` then `loadGame(1)` after wiping units and setting phase `"menu"`.
+
+- `terrain.length` is `54 * 54` (2916)
+- `tiles.length` is 2916
+- unit id, kind, team, x, y, and hp match the pre-save list
+- phase is `"play"`
+- `mapSpan` is 54
+
+Payload estimate, two consecutive full-suite runs, seed 11. The stub does not apply a browser quota. Both saves returned true. Terrain length was exact. Byte length is not asserted: `addNode` rolls `Math.random()` for rare monsters, so the JSON size moves by tens of bytes between runs.
+
+- span 216 (`216 * 216` = 46656 tiles): 723165 bytes, then 723175 bytes
+- span 432 (`432 * 432` = 186624 tiles): 2902463 bytes, then 2902463 bytes
+
+### Item 7 — `findPath`
+
+`findPath` was not changed. Seed 11 is deterministic for walkability (terrain and blockers come from `mulberry32(seed)`; `Math.random` in `addNode` does not move tiles). Start and goal are the walkable cleared-pad cells nearest each pad center. The town hall occupies the pad origin, so the stand cell is beside the hall, still inside `clearPad`.
+
+South pad origin `scaleN(66), scaleN(66)`. North pad origin `scaleN(18), scaleN(18)`.
+
+- span 54: from cell `(34, 32)` to `(10, 8)`, path length 29 (non-empty point array; last point is the goal center)
+- span 108: from cell `(67, 65)` to `(19, 17)`, path length 55 (non-empty point array; last point is the goal center)
+
+Neither call returned `[]`. The 108 budget is `max(8000, min(48000, 108*108/8))` = 8000, and this pad-to-pad route finishes inside that budget.
+
+Items 8 and 9 were not run. `src/lib/auth/server.ts` was not imported. No browser.
+
+### Realm class split — stopped
+
+No split commit. `src/game/engine.ts` stays one class.
+
+`Realm` is about 7515 lines under `// @ts-nocheck`. `src/game/draw.ts` imports the live `MAP_W` and `MAP_H` bindings from that same module, and also `BLDS`, `UNITS`, `BOSSES`, `ITEMS`, and `beastOf`. `beginMatch`, `applyMapSize`, and `loadGame` assign `MAP_W` and `MAP_H`. Those bindings have to stay the same exports or the draw loop reads a stale size. Save, load, `reap`, `rpgFate`, and `findPath` are methods on the one class and close over that map size. A modest extract still means moving code that assigns those bindings or that `loadGame` depends on. There is no typecheck to catch a broken live binding, and these headless tests do not draw or take input. That is the risky move the plan says to skip.
+
+## Option C
+
+Not started.
