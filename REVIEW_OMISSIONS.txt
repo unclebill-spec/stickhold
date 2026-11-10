@@ -1,0 +1,33 @@
+Review-only sanitized copy — not a runnable or complete workspace.
+
+This folder was prepared for a static Grok Build code review. It is not a claim
+that the game boots, installs, deploys, or signs in. Do not run startup.sh,
+npm, tests, or any other lifecycle command from this copy.
+
+Intentionally omitted from this copy (kept only in the immutable evidence
+extract; no secret values are recorded here):
+
+- src/lib/auth/preview.ts
+  Entire preview-auth module removed so this review copy contains no preview
+  login credential. Auth/runtime behavior that depends on that file cannot be
+  assessed here and must not be assumed to work.
+
+- .grok/                          (platform / agent config and skills)
+- .vercel/                        (generated deployment output)
+- .tanstack/                      (generated cache)
+- public/__grok/                  (platform install/PWA scaffolding)
+- vercel.json                     (platform deployment metadata)
+- .github_repo                    (platform metadata)
+- .project_id                     (platform metadata)
+- .node_modules.lock              (generated / platform lock stub)
+
+- AGENTS.md                       (embedded agent instructions; left in evidence only)
+- AGENTS.project.md               (embedded agent instructions; left in evidence only)
+
+Not present in the source archive (nothing to copy):
+- .git/ (history, hooks, or config)
+- .env / .env.* files
+- node_modules/
+
+Game source, public assets, screenshots, and attachment media were preserved.
+This copy is for static Stickhold review only.

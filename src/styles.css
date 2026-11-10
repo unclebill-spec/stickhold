@@ -1,0 +1,77 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Source Sans 3", "Segoe UI", sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --color-parchment: #f3e7cf;
+  --color-parchment-deep: #e4d2ae;
+  --color-ink: #1c1915;
+  --color-muted: #6e6458;
+  --color-line: #2c261f;
+  --color-blue: #2a5bd7;
+  --color-blue-deep: #1c3f9e;
+  --color-ember: #c4502a;
+  --color-gold: #c49212;
+  --color-night: #0c1218;
+  --color-panel: #141c28;
+  --color-panel-edge: #314056;
+  --color-moon: #d5e4f2;
+  --color-mist: #8ea0b5;
+  --color-pumpkin: #e07a2f;
+  --color-candle: #f2c14d;
+  --color-blood: #9a3040;
+  --radius-panel: 0.85rem;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  .realm button:not(:disabled):active {
+    transform: translateY(1px) scale(0.96);
+    filter: brightness(0.86);
+    background-color: #1c3f9e !important;
+    color: #f3e7cf;
+  }
+
+  .btn-used {
+    animation: btn-used 0.42s ease;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--color-ink);
+    color: var(--color-ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-used {
+    animation: none !important;
+  }
+}
+
+@keyframes btn-used {
+  0% {
+    transform: translateY(1px) scale(0.94);
+    background-color: #1c3f9e;
+    color: #f3e7cf;
+  }
+  45% {
+    transform: scale(1.05);
+    background-color: #c49212;
+    color: #1c1915;
+  }
+  100% {
+    transform: none;
+    background-color: #2a5bd7;
+    color: #f3e7cf;
+  }
+}

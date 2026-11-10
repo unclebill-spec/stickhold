@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:8081/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Halloweens Bounty",
+      "hasCanvas": true,
+      "bodyTextLen": 68,
+      "bodyTextHash": "2c7df4586778207d348350b3fd8b1cc1f6fa1c690ba9dd9c3ccacae72450080d",
+      "bodyTextPrefix": "Halloweens Bounty A night raid for gold, lumber, and one hero. B",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Halloweens Bounty",
+      "hasCanvas": true,
+      "bodyTextLen": 68,
+      "bodyTextHash": "2c7df4586778207d348350b3fd8b1cc1f6fa1c690ba9dd9c3ccacae72450080d",
+      "bodyTextPrefix": "Halloweens Bounty A night raid for gold, lumber, and one hero. B",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-built.json",
+  "divergesFromBaseline": false,
+  "baselineReasons": []
+}
