@@ -225,7 +225,7 @@ A Game Director check is the next step (visual and live QA). This pass did not r
 
 `src/lib/auth/preview.ts` is a local-only stub so `src/lib/auth/server.ts` can import `GROK_ISSUER_DEFAULT`, `PREVIEW_ALLOWED_HOSTS`, `PREVIEW_CLIENT_ID`, and `PREVIEW_CLIENT_SECRET`. The issuer, client id, and client secret are obvious placeholders (`local-stub-client-id`, `local-stub-not-a-secret`, `http://127.0.0.1/local-stub-issuer`). `PREVIEW_ALLOWED_HOSTS` is `localhost` and `127.0.0.1` only. No production host, client id, or secret was copied. `server.ts` was not edited. No `.env` was added. OAuth was not implemented. Vite base was not changed. No server was started.
 
-Commit: `PENDING_PREVIEW_STUB_COMMIT`
+Commit: `6f5b10304553113cc315ef7892ce025edb219073`
 
 Test command (unchanged game and menu tests):
 
