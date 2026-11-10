@@ -298,4 +298,4 @@ Same test command after the audio path change:
 
 `tsc --noEmit` still reports the pre-existing errors in `src/game/realm-lifecycle.test.ts` only.
 
-Pages commit: recorded in the follow-up.
+Pages commit: `cddf6be56d61b74707a45baf70f52a8395c7ec2a`
