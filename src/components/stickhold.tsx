@@ -188,15 +188,18 @@ export function Stickhold() {
   const [menuPage, setMenuPage] = useState<"front" | "setup">("front");
   const [usedBtn, setUsedBtn] = useState("");
   const [pauseTab, setPauseTab] = useState<"match" | "audio" | "controls">("match");
-  const [mapPos, setMapPos] = useState(() => ({
-    x: typeof window === "undefined" ? 8 : Math.max(8, window.innerWidth - 104),
-    y: 104,
-  }));
+  // Same coordinates on the server and the first client render. `window` is read
+  // after mount so the hydrated `style.left` does not disagree.
+  const [mapPos, setMapPos] = useState({ x: 8, y: 104 });
   const [workers, setWorkers] = useState(0);
   const workersRef = useRef(-1);
   const [watch, setWatch] = useState("Dawn");
   const watchRef = useRef("");
   const mapDrag = useRef<{ x: number; y: number; ox: number; oy: number; moved: boolean } | null>(null);
+
+  useEffect(() => {
+    setMapPos({ x: Math.max(8, window.innerWidth - 104), y: 104 });
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -333,7 +336,7 @@ export function Stickhold() {
                 {phase === "paused" ? <Play className="size-4" /> : <Pause className="size-4" />}
               </button>
             ) : null}
-            <h1 className="min-w-0 truncate font-display text-lg leading-none font-semibold tracking-tight">Stickhold</h1>
+            <h1 className="hidden shrink-0 font-display text-lg leading-none font-semibold tracking-tight sm:block">Stickhold</h1>
             <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold">
               <Users className="size-3.5" aria-hidden />
               <span>
@@ -419,7 +422,7 @@ export function Stickhold() {
         ) : null}
 
         {snap?.toast && (phase === "play" || phase === "paused") ? (
-          <p className="pointer-events-none mx-2 mt-2 line-clamp-2 max-w-lg rounded-panel bg-ink/90 px-3 py-1.5 text-center text-sm font-semibold text-parchment">
+          <p className="pointer-events-none mx-2 mt-2 mr-[7.5rem] max-w-lg rounded-panel bg-ink/90 px-3 py-1.5 text-left text-sm leading-snug font-semibold text-parchment sm:text-center">
             {snap.toast}
           </p>
         ) : null}
