@@ -167,7 +167,7 @@ Stickhold split commit: `770a9daf7b38a5326f19554d089e3c36faeea50f`
 
 UI and copy only. `src/game/engine.ts` was not edited. `Realm.beginMatch`, `start`, `restart`, `toMenu`, `loadGame`, `saveGame`, combat, pathing, tale fate, and reap were not changed. The win/lose card still calls `endModalBody(phase, snap?.toast ?? "", !!snap?.rpg)`. Stickhold title, favicon, and `#2a5bd7` stay. Menu classes do not use the pumpkin, candle, or blood tokens. Those tokens are still defined in `src/styles.css` and were not removed.
 
-Commit: `PENDING_UI_COMMIT`
+Commit: `9b11f82d152836f1ba74c50265b9cc8a910eda0c`
 
 Test command:
 
