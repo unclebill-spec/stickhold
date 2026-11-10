@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   Coins,
   Hammer,
@@ -16,6 +16,14 @@ import {
 import { drawRealm } from "@/game/draw";
 import { endModalBody } from "@/game/end-card";
 import { Realm, realmApi, type CmdId, type Controls, type Snap } from "@/game/engine";
+import {
+  continueSlot,
+  matchDetail,
+  matchSummary,
+  otherSaveSlots,
+  startLabel,
+  type MatchSetup,
+} from "@/components/menu-flow";
 
 function speedName(v: number) {
   if (v <= 0.5) return "Slow";
@@ -80,24 +88,41 @@ function actName(mode: Controls["doubleClick"]) {
   return "Next fight";
 }
 
-function Choice({ on, onClick, title, note, hot = "bg-ink text-parchment" }: { on: boolean; onClick: () => void; title: string; note: string; hot?: string }) {
+function Choice({
+  on,
+  onClick,
+  title,
+  note,
+  tone = "ink",
+}: {
+  on: boolean;
+  onClick: () => void;
+  title: string;
+  note: string;
+  tone?: "ink" | "blue" | "ember" | "circle" | "egypt";
+}) {
   return (
-    <button type="button" onClick={onClick} className={`flex min-h-12 w-full flex-col items-center justify-center rounded-panel px-1 py-1 text-center ${on ? hot : "bg-parchment-deep"}`}>
-      <span className="text-sm leading-tight font-semibold">{title}</span>
-      <span className={`text-[10px] leading-tight ${on ? "text-parchment/80" : "text-muted"}`}>{note}</span>
+    <button type="button" onClick={onClick} className="menu-choice" aria-pressed={on} data-tone={tone}>
+      <span className="menu-choice-title">{title}</span>
+      <span className="menu-choice-note">{note}</span>
     </button>
+  );
+}
+
+function MenuGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <fieldset className="menu-group">
+      <legend>{title}</legend>
+      {children}
+    </fieldset>
   );
 }
 
 function BindRow({ label, value, hot, onClick }: { label: string; value: string; hot: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center justify-between gap-2 rounded-panel bg-parchment-deep px-2 py-1.5 text-left text-sm"
-    >
-      <span className="min-w-0 truncate">{label}</span>
-      <span className={`shrink-0 font-semibold ${hot ? "text-blue" : ""}`}>{hot ? "Press a key" : value}</span>
+    <button type="button" onClick={onClick} className={`menu-bind${hot ? " is-hot" : ""}`}>
+      <span className="menu-bind-label">{label}</span>
+      <span className="menu-bind-value">{hot ? "Press a key" : value}</span>
     </button>
   );
 }
@@ -119,7 +144,7 @@ function FullButton({ onFail }: { onFail: () => void }) {
   return (
     <button
       type="button"
-      className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-panel bg-parchment-deep text-base font-semibold"
+      className="menu-secondary menu-row menu-follow"
       aria-label={on ? "Leave full screen" : "Full screen"}
       onClick={() => {
         const doc = document as Document & {
@@ -162,7 +187,7 @@ export function Stickhold() {
   const [slots, setSlots] = useState(saveSlots);
   const [menuPage, setMenuPage] = useState<"front" | "setup">("front");
   const [usedBtn, setUsedBtn] = useState("");
-  const [pauseTab, setPauseTab] = useState<"game" | "controls">("game");
+  const [pauseTab, setPauseTab] = useState<"match" | "audio" | "controls">("match");
   const [mapPos, setMapPos] = useState(() => ({
     x: typeof window === "undefined" ? 8 : Math.max(8, window.innerWidth - 104),
     y: 104,
@@ -222,19 +247,80 @@ export function Stickhold() {
     };
   }, []);
 
+  const primaryRef = useRef<HTMLButtonElement>(null);
   const realm = realmRef.current;
   const phase = snap?.phase ?? "menu";
+  const overlay = phase === "menu" || phase === "paused" || phase === "win" || phase === "lose";
+  const savedSlot = continueSlot(slots);
+  const extraSlots = otherSaveSlots(slots);
+  const setup: MatchSetup = {
+    playMode,
+    side,
+    people,
+    mood,
+    sizeStep,
+    diffStep,
+  };
+  const detail = matchDetail(setup);
+  const summary = matchSummary(setup);
+  const launchLabel = startLabel(playMode);
+  const focusKey = phase === "menu" ? `menu:${menuPage}` : phase;
   const workerMenu = !!snap?.selection?.commands.some((c) => c.id === "house");
   const run = (fn: (g: Realm) => void) => {
     if (realmRef.current) fn(realmRef.current);
   };
 
+  useEffect(() => {
+    if (phase === "play") return;
+    primaryRef.current?.focus({ preventScroll: true });
+  }, [focusKey, phase]);
+
+  const launch = () =>
+    run((g) => {
+      g.playerTeam = side;
+      g.faction = people;
+      g.rpg = playMode === "rpg";
+      g.mood = mood;
+      g.rich = RICH[richStep] ?? 1;
+      g.mapRich = RICH[mapStep] ?? 1;
+      g.mapSpan = MAP_SIZES[sizeStep] ?? 108;
+      g.difficulty = diffStep;
+      g.provoked = false;
+      g.start();
+    });
+
+  const leaveToMenu = () => {
+    setMenuPage("front");
+    run((g) => g.toMenu());
+  };
+
+  const trapTab = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const root = event.currentTarget;
+    const items = Array.from(root.querySelectorAll<HTMLElement>("button, input, summary")).filter(
+      (el) => !el.hasAttribute("disabled"),
+    );
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !root.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <main className="realm relative h-dvh w-full overflow-hidden overscroll-none bg-ink text-ink">
       <style>{`@keyframes flagflash{0%,49%{background:#9f2d22;color:#f4efe4}50%,100%{background:#f4efe4;color:#9f2d22}}`}</style>
+      <div inert={overlay ? true : undefined}>
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" aria-label="Realm map" />
 
       <div className="pointer-events-none absolute inset-0 flex flex-col">
+        {phase === "play" || phase === "paused" ? (
         <header className="pointer-events-auto shrink-0 bg-parchment/95 px-2 pt-[max(0.25rem,env(safe-area-inset-top))] pb-1.5 shadow-sm">
           <div className="flex items-center gap-1.5">
             {phase === "play" || phase === "paused" ? (
@@ -307,6 +393,7 @@ export function Stickhold() {
             </div>
           ) : null}
         </header>
+        ) : null}
 
         {phase === "play" || phase === "paused" ? (
           <div className="pointer-events-none px-2 pt-1">
@@ -323,7 +410,7 @@ export function Stickhold() {
           </div>
         ) : null}
 
-        {snap?.need ? (
+        {snap?.need && (phase === "play" || phase === "paused") ? (
           <div className="pointer-events-none absolute inset-x-0 top-28 z-30 flex justify-center px-4">
             <p className="max-w-sm rounded-panel bg-parchment px-4 py-3 text-center text-sm font-semibold text-ink shadow-lg">
               {snap.need}
@@ -331,7 +418,7 @@ export function Stickhold() {
           </div>
         ) : null}
 
-        {snap?.toast ? (
+        {snap?.toast && (phase === "play" || phase === "paused") ? (
           <p className="pointer-events-none mx-2 mt-2 line-clamp-2 max-w-lg rounded-panel bg-ink/90 px-3 py-1.5 text-center text-sm font-semibold text-parchment">
             {snap.toast}
           </p>
@@ -447,373 +534,399 @@ export function Stickhold() {
           realm.minimapClick(e.clientX - r.left, e.clientY - r.top, c.clientWidth, c.clientHeight);
         }}
       />
+      </div>
 
       {phase === "menu" ? (
         <div
-          className="absolute inset-0 z-40 overflow-y-auto bg-ink/35 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          className="menu-scrim"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={menuPage === "front" ? "stickhold-menu-title" : "stickhold-setup-title"}
+          onKeyDown={trapTab}
           onPointerDown={() => run((g) => { g.ensureAudio(); g.score.startMenu(); })}
         >
-          <div className="mx-auto flex min-h-full w-full max-w-md items-center">
           {menuPage === "front" ? (
-          <div className="w-full rounded-panel bg-parchment p-4 shadow-sm">
-            <p className="text-sm font-semibold tracking-wide text-blue uppercase">Start</p>
-            <h2 className="font-display text-4xl leading-none font-semibold">Stickhold</h2>
-            <p className="mt-2 text-base leading-snug text-muted">Start a new game, or return to a saved one.</p>
-            <button
-              type="button"
-              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-panel bg-blue text-base font-semibold text-parchment"
-              onClick={() => setMenuPage("setup")}
-            >
-              Start new game
-            </button>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {[0, 1, 2].map((i) => (
+            <div className="menu-card is-title">
+              <p className="menu-kicker">A stick-figure realm</p>
+              <h2 id="stickhold-menu-title" className="menu-title">Stickhold</h2>
+              <p className="menu-lead">
+                {savedSlot != null
+                  ? "Continue a saved match, or start a new one."
+                  : "Start with this setup, or change it first."}
+              </p>
+              <p className="menu-recap">{summary}</p>
+              <div className="menu-stack">
+                {savedSlot != null ? (
+                  <button
+                    ref={primaryRef}
+                    type="button"
+                    className="menu-primary"
+                    onClick={() => run((g) => g.loadGame(savedSlot))}
+                  >
+                    <span>Continue</span>
+                    <span className="menu-btn-note">Slot {savedSlot}</span>
+                  </button>
+                ) : null}
                 <button
-                  key={i}
+                  ref={savedSlot == null ? primaryRef : undefined}
                   type="button"
-                  disabled={!slots[i]}
-                  className="inline-flex h-12 items-center justify-center rounded-panel bg-ink text-sm font-semibold text-parchment disabled:opacity-40"
-                  onClick={() => run((g) => g.loadGame(i + 1))}
+                  className={savedSlot == null ? "menu-primary" : "menu-secondary"}
+                  onClick={launch}
                 >
-                  Load {i + 1}
+                  {launchLabel}
                 </button>
-              ))}
+                <button type="button" className="menu-quiet" onClick={() => setMenuPage("setup")}>
+                  <span>Match setup</span>
+                  <span className="menu-btn-note">Side, people, map, and difficulty</span>
+                </button>
+              </div>
+              {extraSlots.length ? (
+                <div>
+                  <p className="menu-group-label" id="stickhold-other-saves">Other saves</p>
+                  <div className="menu-slot-row" role="group" aria-labelledby="stickhold-other-saves">
+                    {extraSlots.map((n) => (
+                      <button key={n} type="button" className="menu-secondary" onClick={() => run((g) => g.loadGame(n))}>
+                        Load {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : savedSlot == null ? (
+                <p className="menu-note">No saved games yet.</p>
+              ) : null}
             </div>
-          </div>
           ) : (
-          <div className="w-full rounded-panel bg-parchment p-4 shadow-sm">
-            <button type="button" className="text-sm font-semibold text-blue" onClick={() => setMenuPage("front")}>
-              Back
-            </button>
-            <p className="mt-2 text-sm font-semibold tracking-wide text-blue uppercase">Camp age</p>
-            <h2 className="font-display text-4xl leading-none font-semibold">Stickhold</h2>
-            <p className="mt-2 text-base leading-snug text-muted">
-              A small stick-figure realm. Gather four resources, raise a handful of buildings, and take the other town hall
-              across the ford.
-            </p>
-            <p className="mt-2 text-sm font-semibold">How do you want to play?</p>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <Choice on={playMode === "realm"} title="Skirmish" note="Take their hall" onClick={() => setPlayMode("realm")} />
-              <Choice on={playMode === "rpg"} title="Tale" note="Free your people" onClick={() => setPlayMode("rpg")} />
+            <div className="menu-sheet">
+              <div className="menu-sheet-head">
+                <div className="menu-head-row">
+                  <button type="button" className="menu-back" onClick={() => setMenuPage("front")}>
+                    Back
+                  </button>
+                </div>
+                <h2 id="stickhold-setup-title" className="menu-title menu-title-sm">Match setup</h2>
+                <p className="menu-recap">{summary}</p>
+              </div>
+              <div className="menu-sheet-body">
+                <MenuGroup title="How do you want to play?">
+                  <div className="menu-grid-2">
+                    <Choice on={playMode === "realm"} title="Skirmish" note="Take their hall" onClick={() => setPlayMode("realm")} />
+                    <Choice on={playMode === "rpg"} title="Tale" note="Free your people" onClick={() => setPlayMode("rpg")} />
+                  </div>
+                </MenuGroup>
+                <MenuGroup title="Where do you start?">
+                  <div className="menu-grid-2">
+                    <Choice on={side === 0} title="South" note={people === "stick" ? "Blue champion" : "Bottom of the map"} onClick={() => setSide(0)} tone="blue" />
+                    <Choice on={side === 1} title="North" note={people === "stick" ? "Red chieftain" : "Top of the map"} onClick={() => setSide(1)} tone="ember" />
+                  </div>
+                </MenuGroup>
+                <MenuGroup title="Who are your people?">
+                  <div className="menu-grid-2">
+                    <Choice on={people === "stick"} title="Stickhold" note="The original camps" onClick={() => setPeople("stick")} />
+                    <Choice on={people === "dynasty"} title="Dynasty" note="Long bows, a halberd" onClick={() => setPeople("dynasty")} tone="ember" />
+                    <Choice on={people === "coven"} title="Circle" note="Soldiers that cast" onClick={() => setPeople("coven")} tone="circle" />
+                    <Choice on={people === "egypt"} title="Egypt" note="Chariots and gold" onClick={() => setPeople("egypt")} tone="egypt" />
+                  </div>
+                  {people !== "stick" ? <p className="menu-aside">The other camp stays ordinary sticks.</p> : null}
+                </MenuGroup>
+                {playMode === "realm" ? (
+                  <MenuGroup title="How does the enemy act?">
+                    <div className="menu-grid-3">
+                      <Choice on={mood === "passive"} title="Passive" note="Fights if hit" onClick={() => setMood("passive")} />
+                      <Choice on={mood === "normal"} title="Normal" note="Fights on sight" onClick={() => setMood("normal")} />
+                      <Choice on={mood === "aggressive"} title="Hunts" note="Comes for you" onClick={() => setMood("aggressive")} />
+                    </div>
+                  </MenuGroup>
+                ) : null}
+                <MenuGroup title="Resources and map">
+                  <Slider
+                    label="Starting resources"
+                    hint="What you have at the first moment"
+                    valueLabel={richName(richStep)}
+                    min={0}
+                    max={4}
+                    step={1}
+                    value={richStep}
+                    onChange={(v) => {
+                      setRichStep(v);
+                      run((g) => {
+                        g.rich = RICH[v] ?? 1;
+                        g.applyRich();
+                        g.emit();
+                      });
+                    }}
+                  />
+                  <Slider
+                    label="Map resources"
+                    hint="How much is lying on the ground"
+                    valueLabel={richName(mapStep)}
+                    min={0}
+                    max={4}
+                    step={1}
+                    value={mapStep}
+                    onChange={(v) => {
+                      setMapStep(v);
+                      run((g) => {
+                        g.mapRich = RICH[v] ?? 1;
+                        g.applyRich();
+                        g.emit();
+                      });
+                    }}
+                  />
+                  <Slider
+                    label="Map size"
+                    hint="Small is half. Insanity is four times as wide"
+                    valueLabel={sizeName(sizeStep)}
+                    min={0}
+                    max={3}
+                    step={1}
+                    value={sizeStep}
+                    onChange={(v) => {
+                      setSizeStep(v);
+                      run((g) => {
+                        g.mapSpan = MAP_SIZES[v] ?? 108;
+                      });
+                    }}
+                  />
+                </MenuGroup>
+                {playMode === "realm" ? (
+                  <MenuGroup title="Enemy strength">
+                    <Slider
+                      label="Enemy strength"
+                      hint="Higher means a smarter enemy with more goods"
+                      valueLabel={diffName(diffStep)}
+                      min={0}
+                      max={3}
+                      step={1}
+                      value={diffStep}
+                      onChange={(v) => {
+                        setDiffStep(v);
+                        run((g) => {
+                          g.difficulty = v;
+                        });
+                      }}
+                    />
+                    <p className="menu-aside">
+                      {diffStep <= 0
+                        ? "A slower enemy with a smaller army."
+                        : diffStep <= 1
+                          ? "The current enemy."
+                          : diffStep <= 2
+                            ? "Smarter, and 200 extra of each resource."
+                            : "Much smarter, 1000 extra of each resource, and they start in the Village Age."}
+                    </p>
+                  </MenuGroup>
+                ) : null}
+                <details className="menu-help">
+                  <summary>How to play</summary>
+                  <ul>
+                    <li>
+                      <Swords className="mt-0.5 size-4 shrink-0" aria-hidden />
+                      Tap a person to select them. Drag a box around several. Tap the ground, a tree, or an enemy to give an order.
+                    </li>
+                    <li>
+                      <Hammer className="mt-0.5 size-4 shrink-0" aria-hidden />
+                      Villagers build. The town hall trains people and advances the age. Pause is the button at the top left.
+                    </li>
+                  </ul>
+                </details>
+              </div>
+              <div className="menu-sheet-foot">
+                <button ref={primaryRef} type="button" className="menu-primary" onClick={launch}>
+                  <span>{launchLabel}</span>
+                  <span className="menu-btn-note">{detail}</span>
+                </button>
+              </div>
             </div>
-            <p className="mt-3 text-sm font-semibold">Where do you start?</p>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <Choice on={side === 0} title="South" note={people === "stick" ? "Blue champion" : "Bottom of the map"} onClick={() => setSide(0)} hot="bg-blue text-parchment" />
-              <Choice on={side === 1} title="North" note={people === "stick" ? "Red chieftain" : "Top of the map"} onClick={() => setSide(1)} hot="bg-ember text-parchment" />
-            </div>
-            {people !== "stick" ? <p className="mt-1 text-xs leading-snug text-muted">The other camp stays ordinary sticks.</p> : null}
-            <p className="mt-3 text-sm font-semibold">Who are your people?</p>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <Choice on={people === "stick"} title="Stickhold" note="The original camps" onClick={() => setPeople("stick")} />
-              <Choice on={people === "dynasty"} title="Dynasty" note="Long bows, a halberd" onClick={() => setPeople("dynasty")} hot="bg-ember text-parchment" />
-              <Choice on={people === "coven"} title="Circle" note="Soldiers that cast" onClick={() => setPeople("coven")} hot="bg-[#6d3fa8] text-parchment" />
-              <Choice on={people === "egypt"} title="Egypt" note="Chariots and gold" onClick={() => setPeople("egypt")} hot="bg-[#1a4f7a] text-parchment" />
-            </div>
-            {playMode === "realm" ? (
-            <>
-            <p className="mt-3 text-sm font-semibold">How does the enemy act?</p>
-            <div className="mt-1 grid grid-cols-3 gap-2">
-              <Choice on={mood === "passive"} title="Passive" note="Fights if hit" onClick={() => setMood("passive")} />
-              <Choice on={mood === "normal"} title="Normal" note="Fights on sight" onClick={() => setMood("normal")} />
-              <Choice on={mood === "aggressive"} title="Hunts" note="Comes for you" onClick={() => setMood("aggressive")} />
-            </div>
-            </>
-            ) : null}
-            <Slider
-              label="Starting resources"
-              hint="What you have at the first moment"
-              valueLabel={richName(richStep)}
-              min={0}
-              max={4}
-              step={1}
-              value={richStep}
-              onChange={(v) => {
-                setRichStep(v);
-                run((g) => {
-                  g.rich = RICH[v] ?? 1;
-                  g.applyRich();
-                  g.emit();
-                });
-              }}
-            />
-            <Slider
-              label="Map resources"
-              hint="How much is lying on the ground"
-              valueLabel={richName(mapStep)}
-              min={0}
-              max={4}
-              step={1}
-              value={mapStep}
-              onChange={(v) => {
-                setMapStep(v);
-                run((g) => {
-                  g.mapRich = RICH[v] ?? 1;
-                  g.applyRich();
-                  g.emit();
-                });
-              }}
-            />
-            <Slider
-              label="Map size"
-              hint="Small is half. Insanity is four times as wide"
-              valueLabel={sizeName(sizeStep)}
-              min={0}
-              max={3}
-              step={1}
-              value={sizeStep}
-              onChange={(v) => {
-                setSizeStep(v);
-                run((g) => {
-                  g.mapSpan = MAP_SIZES[v] ?? 108;
-                });
-              }}
-            />
-            {playMode === "realm" ? (
-            <>
-            <Slider
-              label="Enemy strength"
-              hint="Higher means a smarter enemy with more goods"
-              valueLabel={diffName(diffStep)}
-              min={0}
-              max={3}
-              step={1}
-              value={diffStep}
-              onChange={(v) => {
-                setDiffStep(v);
-                run((g) => {
-                  g.difficulty = v;
-                });
-              }}
-            />
-            <p className="mt-1 text-sm leading-snug text-muted">
-              {diffStep <= 0
-                ? "A slower enemy with a smaller army."
-                : diffStep <= 1
-                  ? "The current enemy."
-                  : diffStep <= 2
-                    ? "Smarter, and 200 extra of each resource."
-                    : "Much smarter, 1000 extra of each resource, and they start in the Village Age."}
-            </p>
-            </>
-            ) : null}
-            <ul className="mt-3 space-y-1 text-sm leading-snug">
-              <li className="flex gap-2">
-                <Swords className="mt-0.5 size-4 shrink-0" aria-hidden />
-                Tap a person to select them. Drag a box around several. Tap the ground, a tree, or an enemy to give an order.
-              </li>
-              <li className="flex gap-2">
-                <Hammer className="mt-0.5 size-4 shrink-0" aria-hidden />
-                Villagers build. The town hall trains people and advances the age. Pause is the button at the top left.
-              </li>
-            </ul>
-            <button
-              type="button"
-              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-panel bg-blue text-base font-semibold text-parchment"
-              onClick={() =>
-                run((g) => {
-                  g.playerTeam = side;
-                  g.faction = people;
-                  g.rpg = playMode === "rpg";
-                  g.mood = mood;
-                  g.rich = RICH[richStep] ?? 1;
-                  g.mapRich = RICH[mapStep] ?? 1;
-                  g.mapSpan = MAP_SIZES[sizeStep] ?? 108;
-                  g.difficulty = diffStep;
-                  g.provoked = false;
-                  g.start();
-                })
-              }
-            >
-              Start game
-            </button>
-          </div>
           )}
-          </div>
         </div>
       ) : null}
 
       {phase === "paused" && snap ? (
-        <div className="absolute inset-0 z-40 flex items-center justify-center overflow-y-auto bg-ink/50 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="w-full max-w-sm rounded-panel bg-parchment p-5 shadow-sm">
-            <h2 className="font-display text-3xl leading-none font-semibold">Paused</h2>
-            <p className="mt-1 text-sm text-muted">Nothing moves until you resume.</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className={`inline-flex h-10 items-center justify-center rounded-panel text-sm font-semibold ${pauseTab === "game" ? "bg-ink text-parchment" : "bg-parchment-deep"}`}
-                onClick={() => setPauseTab("game")}
-              >
-                Game
-              </button>
-              <button
-                type="button"
-                className={`inline-flex h-10 items-center justify-center rounded-panel text-sm font-semibold ${pauseTab === "controls" ? "bg-ink text-parchment" : "bg-parchment-deep"}`}
-                onClick={() => setPauseTab("controls")}
-              >
-                Controls
-              </button>
-            </div>
-            {pauseTab === "game" ? (
-              <>
-            <Slider
-              label="Game speed"
-              valueLabel={`${speedName(snap.speed)} · ${snap.speed}×`}
-              min={0.5}
-              max={3}
-              step={0.5}
-              value={snap.speed}
-              onChange={(v) => run((g) => g.setSpeed(v))}
-            />
-            <Slider
-              label="Sound effects"
-              valueLabel={`${Math.round(snap.sfx * 100)}%`}
-              min={0}
-              max={1}
-              step={0.05}
-              value={snap.sfx}
-              onChange={(v) => run((g) => g.setSfx(v))}
-            />
-            <Slider
-              label="Music"
-              valueLabel={`${Math.round(snap.music * 100)}%`}
-              min={0}
-              max={1}
-              step={0.05}
-              value={snap.music}
-              onChange={(v) => run((g) => g.setMusic(v))}
-            />
-              </>
-            ) : snap.controls ? (
-              <div className="mt-3 flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">
-                <p className="text-xs leading-snug text-muted">Tap a key row, then press the new key. Arrow keys always move the view.</p>
-                <p className="text-xs font-semibold tracking-wide text-blue uppercase">Computer</p>
-                <BindRow label="Pan up" value={keyName(snap.controls.panUp)} hot={snap.capture === "panUp"} onClick={() => run((g) => { g.capture = "panUp"; g.emit(); })} />
-                <BindRow label="Pan down" value={keyName(snap.controls.panDown)} hot={snap.capture === "panDown"} onClick={() => run((g) => { g.capture = "panDown"; g.emit(); })} />
-                <BindRow label="Pan left" value={keyName(snap.controls.panLeft)} hot={snap.capture === "panLeft"} onClick={() => run((g) => { g.capture = "panLeft"; g.emit(); })} />
-                <BindRow label="Pan right" value={keyName(snap.controls.panRight)} hot={snap.capture === "panRight"} onClick={() => run((g) => { g.capture = "panRight"; g.emit(); })} />
-                <BindRow label="Pause" value={keyName(snap.controls.pause)} hot={snap.capture === "pause"} onClick={() => run((g) => { g.capture = "pause"; g.emit(); })} />
-                <BindRow label="Pause also" value={keyName(snap.controls.pauseAlt)} hot={snap.capture === "pauseAlt"} onClick={() => run((g) => { g.capture = "pauseAlt"; g.emit(); })} />
-                <BindRow label="Idle villagers" value={keyName(snap.controls.idle)} hot={snap.capture === "idle"} onClick={() => run((g) => { g.capture = "idle"; g.emit(); })} />
-                <BindRow label="Cycle unit type" value={keyName(snap.controls.cycle)} hot={snap.capture === "cycle"} onClick={() => run((g) => { g.capture = "cycle"; g.emit(); })} />
-                {snap.controls.group.map((code, i) => (
-                  <BindRow
-                    key={i}
-                    label={`Group ${i}`}
-                    value={keyName(code)}
-                    hot={snap.capture === `group${i}`}
-                    onClick={() => run((g) => { g.capture = `group${i}`; g.emit(); })}
-                  />
-                ))}
-                <BindRow
-                  label="Save group with"
-                  value={snap.controls.groupMod === "alt" ? "Alt" : snap.controls.groupMod === "shift" ? "Shift" : "Ctrl"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ groupMod: g.controls.groupMod === "ctrl" ? "alt" : g.controls.groupMod === "alt" ? "shift" : "ctrl" }))}
-                />
-                <BindRow
-                  label="Drag box select"
-                  value={snap.controls.selectButton === 2 ? "Right button" : "Left button"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ selectButton: g.controls.selectButton === 0 ? 2 : 0 }))}
-                />
-                <BindRow
-                  label="Command click"
-                  value={snap.controls.commandButton === 0 ? "Left button" : "Right button"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ commandButton: g.controls.commandButton === 2 ? 0 : 2 }))}
-                />
-                <BindRow
-                  label="Mouse wheel"
-                  value={snap.controls.wheelDir < 0 ? "Scroll up zooms out" : "Scroll up zooms in"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ wheelDir: g.controls.wheelDir < 0 ? 1 : -1 }))}
-                />
-                <BindRow label="Double-click a unit" value={actName(snap.controls.doubleClick)} hot={false} onClick={() => run((g) => g.cycleMode("doubleClick"))} />
-                <p className="mt-2 text-xs font-semibold tracking-wide text-blue uppercase">Phone</p>
-                <NoteRow label="Slide one finger" value="Moves the view" />
-                <NoteRow label="Hold, then drag" value="Selects a group" />
-                <BindRow
-                  label="Pinch"
-                  value={snap.controls.pinchDir < 0 ? "Spread zooms out" : "Spread zooms in"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ pinchDir: g.controls.pinchDir < 0 ? 1 : -1 }))}
-                />
-                <BindRow label="Double-tap a unit" value={actName(snap.controls.doubleTap)} hot={false} onClick={() => run((g) => g.cycleMode("doubleTap"))} />
-                <BindRow
-                  label="Flag button"
-                  value={snap.controls.flag === "idle" ? "Finds idle villagers" : "Jumps to a fight"}
-                  hot={false}
-                  onClick={() => run((g) => g.patchControls({ flag: g.controls.flag === "fight" ? "idle" : "fight" }))}
-                />
-              </div>
-            ) : null}
-            <FullButton onFail={() => run((g) => g.say("Full screen is not available in this view."))} />
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {[1, 2, 3].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  className="inline-flex h-12 items-center justify-center rounded-panel bg-ink text-sm font-semibold text-parchment"
-                  onClick={() =>
-                    run((g) => {
-                      if (g.saveGame(n)) setSlots(saveSlots());
-                    })
-                  }
-                >
-                  Save {n}
+        <div className="menu-scrim" role="dialog" aria-modal="true" aria-labelledby="stickhold-pause-title" onKeyDown={trapTab}>
+          <div className="menu-sheet">
+            <div className="menu-sheet-head">
+              <h2 id="stickhold-pause-title" className="menu-title menu-title-sm">Paused</h2>
+              <p className="menu-lead">Nothing moves until you resume.</p>
+              <div className="menu-stack">
+                <button ref={primaryRef} type="button" className="menu-primary menu-row" onClick={() => run((g) => g.togglePause())}>
+                  <Play className="size-4" aria-hidden />
+                  Resume
                 </button>
-              ))}
+                <button type="button" className="menu-secondary" onClick={leaveToMenu}>
+                  <span>Leave to menu</span>
+                  <span className="menu-btn-note">Does not save</span>
+                </button>
+              </div>
+              <p className="menu-note">
+                {snap.controls ? `${keyName(snap.controls.pauseAlt)} or ${keyName(snap.controls.pause)} also resumes.` : "P or Esc also resumes."}
+              </p>
+              <div className="menu-tabs" role="tablist" aria-label="Settings">
+                {(
+                  [
+                    ["match", "Match"],
+                    ["audio", "Audio"],
+                    ["controls", "Controls"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    id={`pause-tab-${id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={pauseTab === id}
+                    aria-controls="pause-panel"
+                    className={`menu-tab${pauseTab === id ? " is-on" : ""}`}
+                    onClick={() => setPauseTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <button
-              type="button"
-              className="mt-2 inline-flex h-12 w-full items-center justify-center rounded-panel bg-parchment-deep text-base font-semibold"
-              onClick={() => {
-                setMenuPage("front");
-                run((g) => g.toMenu());
-              }}
+            <div
+              id="pause-panel"
+              role="tabpanel"
+              aria-labelledby={`pause-tab-${pauseTab}`}
+              className="menu-sheet-body"
             >
-              Main menu
-            </button>
-            <button
-              type="button"
-              className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-panel bg-blue text-base font-semibold text-parchment"
-              onClick={() => run((g) => g.togglePause())}
-            >
-              <Play className="size-4" aria-hidden />
-              Resume
-            </button>
-            <p className="mt-2 text-center text-sm text-muted">{snap.controls ? `${keyName(snap.controls.pauseAlt)} or ${keyName(snap.controls.pause)} also resumes.` : "P or Esc also resumes."}</p>
+              {pauseTab === "match" ? (
+                <>
+                  <p className="menu-group-label" id="stickhold-save-slots">Save this match</p>
+                  <div className="menu-slot-row" role="group" aria-labelledby="stickhold-save-slots">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className="menu-secondary"
+                        onClick={() =>
+                          run((g) => {
+                            if (g.saveGame(n)) setSlots(saveSlots());
+                          })
+                        }
+                      >
+                        Save {n}
+                      </button>
+                    ))}
+                  </div>
+                  <Slider
+                    label="Game speed"
+                    valueLabel={`${speedName(snap.speed)} · ${snap.speed}×`}
+                    min={0.5}
+                    max={3}
+                    step={0.5}
+                    value={snap.speed}
+                    onChange={(v) => run((g) => g.setSpeed(v))}
+                  />
+                  <FullButton onFail={() => run((g) => g.say("Full screen is not available in this view."))} />
+                </>
+              ) : pauseTab === "audio" ? (
+                <>
+                  <Slider
+                    label="Sound effects"
+                    valueLabel={`${Math.round(snap.sfx * 100)}%`}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={snap.sfx}
+                    onChange={(v) => run((g) => g.setSfx(v))}
+                  />
+                  <Slider
+                    label="Music"
+                    valueLabel={`${Math.round(snap.music * 100)}%`}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={snap.music}
+                    onChange={(v) => run((g) => g.setMusic(v))}
+                  />
+                </>
+              ) : snap.controls ? (
+                <div className="menu-binds">
+                  <p className="menu-aside">Tap a key row, then press the new key. Arrow keys always move the view.</p>
+                  <p className="menu-section-label">Computer</p>
+                  <BindRow label="Pan up" value={keyName(snap.controls.panUp)} hot={snap.capture === "panUp"} onClick={() => run((g) => { g.capture = "panUp"; g.emit(); })} />
+                  <BindRow label="Pan down" value={keyName(snap.controls.panDown)} hot={snap.capture === "panDown"} onClick={() => run((g) => { g.capture = "panDown"; g.emit(); })} />
+                  <BindRow label="Pan left" value={keyName(snap.controls.panLeft)} hot={snap.capture === "panLeft"} onClick={() => run((g) => { g.capture = "panLeft"; g.emit(); })} />
+                  <BindRow label="Pan right" value={keyName(snap.controls.panRight)} hot={snap.capture === "panRight"} onClick={() => run((g) => { g.capture = "panRight"; g.emit(); })} />
+                  <BindRow label="Pause" value={keyName(snap.controls.pause)} hot={snap.capture === "pause"} onClick={() => run((g) => { g.capture = "pause"; g.emit(); })} />
+                  <BindRow label="Pause also" value={keyName(snap.controls.pauseAlt)} hot={snap.capture === "pauseAlt"} onClick={() => run((g) => { g.capture = "pauseAlt"; g.emit(); })} />
+                  <BindRow label="Idle villagers" value={keyName(snap.controls.idle)} hot={snap.capture === "idle"} onClick={() => run((g) => { g.capture = "idle"; g.emit(); })} />
+                  <BindRow label="Cycle unit type" value={keyName(snap.controls.cycle)} hot={snap.capture === "cycle"} onClick={() => run((g) => { g.capture = "cycle"; g.emit(); })} />
+                  {snap.controls.group.map((code, i) => (
+                    <BindRow
+                      key={i}
+                      label={`Group ${i}`}
+                      value={keyName(code)}
+                      hot={snap.capture === `group${i}`}
+                      onClick={() => run((g) => { g.capture = `group${i}`; g.emit(); })}
+                    />
+                  ))}
+                  <BindRow
+                    label="Save group with"
+                    value={snap.controls.groupMod === "alt" ? "Alt" : snap.controls.groupMod === "shift" ? "Shift" : "Ctrl"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ groupMod: g.controls.groupMod === "ctrl" ? "alt" : g.controls.groupMod === "alt" ? "shift" : "ctrl" }))}
+                  />
+                  <BindRow
+                    label="Drag box select"
+                    value={snap.controls.selectButton === 2 ? "Right button" : "Left button"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ selectButton: g.controls.selectButton === 0 ? 2 : 0 }))}
+                  />
+                  <BindRow
+                    label="Command click"
+                    value={snap.controls.commandButton === 0 ? "Left button" : "Right button"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ commandButton: g.controls.commandButton === 2 ? 0 : 2 }))}
+                  />
+                  <BindRow
+                    label="Mouse wheel"
+                    value={snap.controls.wheelDir < 0 ? "Scroll up zooms out" : "Scroll up zooms in"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ wheelDir: g.controls.wheelDir < 0 ? 1 : -1 }))}
+                  />
+                  <BindRow label="Double-click a unit" value={actName(snap.controls.doubleClick)} hot={false} onClick={() => run((g) => g.cycleMode("doubleClick"))} />
+                  <p className="menu-section-label">Phone</p>
+                  <NoteRow label="Slide one finger" value="Moves the view" />
+                  <NoteRow label="Hold, then drag" value="Selects a group" />
+                  <BindRow
+                    label="Pinch"
+                    value={snap.controls.pinchDir < 0 ? "Spread zooms out" : "Spread zooms in"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ pinchDir: g.controls.pinchDir < 0 ? 1 : -1 }))}
+                  />
+                  <BindRow label="Double-tap a unit" value={actName(snap.controls.doubleTap)} hot={false} onClick={() => run((g) => g.cycleMode("doubleTap"))} />
+                  <BindRow
+                    label="Flag button"
+                    value={snap.controls.flag === "idle" ? "Finds idle villagers" : "Jumps to a fight"}
+                    hot={false}
+                    onClick={() => run((g) => g.patchControls({ flag: g.controls.flag === "fight" ? "idle" : "fight" }))}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
 
       {phase === "win" || phase === "lose" ? (
-        <div className="absolute inset-0 z-40 flex items-center justify-center overflow-y-auto bg-ink/45 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="w-full max-w-sm rounded-panel bg-parchment p-5 text-center shadow-sm">
-            <h2 className="font-display text-3xl font-semibold">{phase === "win" ? "You won" : "You lost"}</h2>
-            <p className="mt-2 text-sm text-muted">{endModalBody(phase, snap?.toast ?? "", !!snap?.rpg)}</p>
-            <p className="mt-1 text-sm font-semibold tabular-nums">{fmt(snap?.time ?? 0)}</p>
-            <button
-              type="button"
-              className="mt-2 inline-flex h-12 w-full items-center justify-center rounded-panel bg-parchment-deep text-base font-semibold"
-              onClick={() => {
-                setMenuPage("front");
-                run((g) => g.toMenu());
-              }}
-            >
-              Main menu
-            </button>
-            <button
-              type="button"
-              className="mt-4 inline-flex h-12 w-full items-center justify-center rounded-panel bg-ember text-base font-semibold text-parchment"
-              onClick={() => run((g) => g.restart())}
-            >
-              Play again
-            </button>
+        <div className="menu-scrim" role="dialog" aria-modal="true" aria-labelledby="stickhold-end-title" onKeyDown={trapTab}>
+          <div className="menu-card is-end">
+            <p className={`menu-kicker${phase === "lose" ? " is-lose" : ""}`}>{snap?.rpg ? "Tale" : "Skirmish"}</p>
+            <h2 id="stickhold-end-title" className="menu-title menu-title-sm">{phase === "win" ? "You won" : "You lost"}</h2>
+            <p className="menu-end-copy">{endModalBody(phase, snap?.toast ?? "", !!snap?.rpg)}</p>
+            <p className="menu-time">Time {fmt(snap?.time ?? 0)}</p>
+            <div className="menu-stack">
+              <button ref={primaryRef} type="button" className="menu-primary" onClick={() => run((g) => g.restart())}>
+                Play again
+              </button>
+              <button type="button" className="menu-secondary" onClick={leaveToMenu}>
+                Main menu
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
-
       <span className="sr-only">{realm ? "ready" : "loading"}</span>
     </main>
   );
@@ -880,9 +993,9 @@ function TinyMan({ kind, lead }: { kind: string; lead: boolean }) {
 
 function NoteRow({ label, value }: { label: string; value: string }) {
   return (
-    <p className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left text-sm text-muted">
-      <span className="min-w-0 truncate">{label}</span>
-      <span className="shrink-0">{value}</span>
+    <p className="menu-note-row">
+      <span>{label}</span>
+      <span>{value}</span>
     </p>
   );
 }
@@ -907,14 +1020,14 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="mt-3 block">
-      <span className="flex items-baseline justify-between gap-3 text-sm font-semibold">
+    <label className="menu-slider">
+      <span className="menu-slider-label">
         <span>{label}</span>
-        <span className="text-muted">{valueLabel}</span>
+        <span>{valueLabel}</span>
       </span>
-      {hint ? <span className="mt-0.5 block text-xs leading-tight text-muted">{hint}</span> : null}
+      {hint ? <span className="menu-slider-hint">{hint}</span> : null}
       <input
-        className="mt-1 h-11 w-full accent-blue"
+        className="menu-range"
         type="range"
         min={min}
         max={max}

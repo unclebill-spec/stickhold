@@ -162,3 +162,61 @@ The glob is `src/game/realm-lifecycle.test.ts` and `src/game/end-card.test.ts`.
 - fail 0
 
 Stickhold split commit: `770a9daf7b38a5326f19554d089e3c36faeea50f`
+
+## Menu screens
+
+UI and copy only. `src/game/engine.ts` was not edited. `Realm.beginMatch`, `start`, `restart`, `toMenu`, `loadGame`, `saveGame`, combat, pathing, tale fate, and reap were not changed. The win/lose card still calls `endModalBody(phase, snap?.toast ?? "", !!snap?.rpg)`. Stickhold title, favicon, and `#2a5bd7` stay. Menu classes do not use the pumpkin, candle, or blood tokens. Those tokens are still defined in `src/styles.css` and were not removed.
+
+Commit: `PENDING_UI_COMMIT`
+
+Test command:
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/*.test.ts src/components/*.test.ts
+```
+
+`src/lib/og/*.test.ts` matches no files, so that glob was left out. The command above is the previous game suite plus `src/components/menu-flow.test.ts`.
+
+- tests 22
+- pass 22
+- fail 0
+
+17 of those are the existing realm and end-card tests. 5 are the new menu-flow tests. No React render. `node_modules` is not installed.
+
+### Title / main menu
+
+Before: "Start new game" always opened setup. Three load buttons showed even when the slot was empty.
+
+After: One primary action. Continue loads the lowest filled slot when a save exists. Otherwise Start skirmish or Start tale launches with the current setup in one step. A line above the buttons states that setup. Match setup is a separate full-height button. Empty slots are hidden. Other filled slots are Load buttons.
+
+### Skirmish / setup
+
+Before: The page repeated the title and the lore, then mode, side, people, mood, and sliders. Start game sat under the how-to-play lines, so a phone had to scroll to it.
+
+After: Back returns to the title. A one-line summary shows the current mode, side, people, mood, map, and foe. The same choices sit in labeled groups. How to play is a disclosure. Start stays pinned to the bottom of the sheet and uses the same `start()` fields as before.
+
+### Pause
+
+Before: Resume sat under speed, audio, full screen, three saves, and Main menu. On the controls tab it also sat under the key list.
+
+After: Resume is the blue primary and stays in the sheet head. Leave to menu is directly under it and says it does not save. Esc or P still resumes. Match, Audio, and Controls are tabs. The tab body scrolls, so the key list does not push Resume off the screen.
+
+### Settings / controls / audio
+
+Before: Speed, sound effects, and music shared the Game tab. Controls was a second tab with a short inner scroller. Key rows were shorter than a thumb target.
+
+After: Match holds the three save slots, game speed, and full screen. Audio holds the two volume sliders. Controls holds the same computer and phone rows, at least 44px tall. Tabs, choices, sliders, and the how-to-play summary are keyboard reachable. Tab loops inside the open sheet. Focus moves to the primary button when the title, pause, or end sheet opens.
+
+### Win / lose
+
+Before: Main menu came first. Play again was an ember button under it. The ending sentence was small muted text.
+
+After: Play again is the blue primary and comes first. Main menu is secondary. A Tale or Skirmish kicker sits above You won / You lost. The sentence is still `endModalBody`, so Tale and Skirmish endings are unchanged. The match time stays.
+
+### Screenshots
+
+Not taken. `node_modules` is absent, so Vite cannot boot and Tailwind in `src/styles.css` is not a built stylesheet. Google Chrome is installed, but there is no app bundle to open. No packages were installed, and nothing was downloaded. `/workspace/handoffs/stickhold-ui-20261110/` was left empty.
+
+### Next step
+
+A Game Director check is the next step (visual and live QA). This pass did not run a live game and does not claim qa-run-claim or game-qa.
