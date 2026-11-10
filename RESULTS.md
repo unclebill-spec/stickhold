@@ -220,3 +220,21 @@ Not taken. `node_modules` is absent, so Vite cannot boot and Tailwind in `src/st
 ### Next step
 
 A Game Director check is the next step (visual and live QA). This pass did not run a live game and does not claim qa-run-claim or game-qa.
+
+## Preview auth stub
+
+`src/lib/auth/preview.ts` is a local-only stub so `src/lib/auth/server.ts` can import `GROK_ISSUER_DEFAULT`, `PREVIEW_ALLOWED_HOSTS`, `PREVIEW_CLIENT_ID`, and `PREVIEW_CLIENT_SECRET`. The issuer, client id, and client secret are obvious placeholders (`local-stub-client-id`, `local-stub-not-a-secret`, `http://127.0.0.1/local-stub-issuer`). `PREVIEW_ALLOWED_HOSTS` is `localhost` and `127.0.0.1` only. No production host, client id, or secret was copied. `server.ts` was not edited. No `.env` was added. OAuth was not implemented. Vite base was not changed. No server was started.
+
+Commit: `PENDING_PREVIEW_STUB_COMMIT`
+
+Test command (unchanged game and menu tests):
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/*.test.ts src/components/*.test.ts
+```
+
+- tests 22
+- pass 22
+- fail 0
+
+Pre-existing `tsc` errors in `src/game/realm-lifecycle.test.ts` were not fixed in this commit.
