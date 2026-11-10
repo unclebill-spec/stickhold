@@ -917,6 +917,10 @@ function loadControls(): Controls {
 function emptyGroups() {
 	return [[], [], [], [], [], [], [], [], [], []];
 }
+function freshTech() {
+	const side = () => ({ structure: 0, weaponry: 0, siege: 0, fortitude: 0, efficiency: 0, economy: 0, ward: 0, rampart: 0 });
+	return [side(), side()];
+}
 function packMask(bytes) {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	let out = "";
@@ -1422,32 +1426,7 @@ export class Realm {
 		return this.box;
 	}
 	start() {
-		this.applyMapSize();
-		if (this.rpg) this.generate(this.seed);
-		this.phase = "play";
-		this.provoked = false;
-		this.toast = this.rpg ? "Your people are caged in the scattered towns. Free them, lead them home, and win the wild. A beaten beast may join you." : this.faction === "egypt" ? "The river people take the field. Chariots are quicker, bows reach farther, and gold comes easier." : this.faction === "coven" ? "The circle takes the field. Every soldier casts. The Archmage leads them." : this.faction === "dynasty" ? "The dynasty takes the field. Longer bows, quicker hands, and the halberd." : "Gather wood and food. A dare is waiting under the resources.";
-		this.toastT = 7;
-		this.rollDare(true);
-		this.kills = 0;
-		this.streak = 0;
-		this.streakT = 0;
-		this.heroFallen = [null, null];
-		this.drops = [];
-		this.clearedHomes = [];
-		this.ensureAudio();
-		this.score.start();
-		this.applyRich();
-		if (!this.rpg) this.applyDifficulty();
-		for (const u of this.units) if (u.hp > 0 && (u.level || 1) <= 1 && !(u.gear || []).length) u.hp = this.unitMax(u.kind, u.team);
-		if (this.rpg) {
-			const hero = this.units.find((u) => u.team === this.playerTeam && u.kind === "hero" && u.hp > 0);
-			this.selectedUnits = hero ? [hero.id] : [];
-			this.selectedBuilding = null;
-		}
-		this.blip(520, .06, .05);
-		this.focusPlayer();
-		this.emit();
+		this.beginMatch("start");
 	}
 	toMenu() {
 		this.phase = "menu";
@@ -1456,35 +1435,46 @@ export class Realm {
 		this.emit();
 	}
 	restart() {
-		const next = new Realm(Math.random() * 99999 | 0);
-		next.rpg = this.rpg;
-		next.playerTeam = this.playerTeam;
-		if (this.rpg) next.generate(next.seed);
-		this.seed = next.seed;
-		this.tiles = next.tiles;
-		this.nodes = next.nodes;
-		this.units = next.units;
-		this.buildings = next.buildings;
-		this.shots = [];
-		this.floaters = [];
-		this.stock = next.stock;
-		this.baseStock = next.baseStock;
+		this.seed = Math.random() * 99999 | 0;
+		this.beginMatch("restart");
+	}
+	beginMatch(mode) {
+		const span = this.mapSpan || 108;
+		MAP_W = span;
+		MAP_H = span;
+		this.explored = new Uint8Array(span * span);
+		this.visible = new Uint8Array(span * span);
 		this.age = [0, 0];
+		this.tech = freshTech();
 		this.time = 0;
-		this.fx = 67.5;
-		this.fy = 67.5;
-		this.zoom = 1;
-		this.placing = null;
+		this.generate(this.seed);
+		this.time = 0;
+		this.age = [0, 0];
+		this.tech = freshTech();
 		this.selectedUnits = [];
 		this.selectedBuilding = null;
 		this.groups = emptyGroups();
-		this.fightAt = 0;
-		this.aiAttack = false;
-		this.provoked = false;
-		this.aiT = 1;
+		this.militiaLeft = 0;
+		this.militiaCd = 0;
+		this.fury = 0;
+		if (!this.rpg) this.tale = null;
+		this.shots = [];
+		this.floaters = [];
+		this.placing = null;
 		this.phase = "play";
-		this.toast = this.rpg ? "A new tale. Free your people and lead them home." : this.faction === "egypt" ? "The river people take the field. Chariots are quicker, bows reach farther, and gold comes easier." : this.faction === "coven" ? "The circle takes the field. Every soldier casts. The Archmage leads them." : this.faction === "dynasty" ? "The dynasty takes the field. Longer bows, quicker hands, and the halberd." : "A new realm. Take their town hall. The dare pays you along the way.";
-		this.toastT = 5;
+		this.provoked = false;
+		if (mode === "restart") {
+			this.fx = 67.5;
+			this.fy = 67.5;
+			this.zoom = 1;
+			this.fightAt = 0;
+			this.aiAttack = false;
+			this.aiT = 1;
+		}
+		this.toast = mode === "start"
+			? (this.rpg ? "Your people are caged in the scattered towns. Free them, lead them home, and win the wild. A beaten beast may join you." : this.faction === "egypt" ? "The river people take the field. Chariots are quicker, bows reach farther, and gold comes easier." : this.faction === "coven" ? "The circle takes the field. Every soldier casts. The Archmage leads them." : this.faction === "dynasty" ? "The dynasty takes the field. Longer bows, quicker hands, and the halberd." : "Gather wood and food. A dare is waiting under the resources.")
+			: (this.rpg ? "A new tale. Free your people and lead them home." : this.faction === "egypt" ? "The river people take the field. Chariots are quicker, bows reach farther, and gold comes easier." : this.faction === "coven" ? "The circle takes the field. Every soldier casts. The Archmage leads them." : this.faction === "dynasty" ? "The dynasty takes the field. Longer bows, quicker hands, and the halberd." : "A new realm. Take their town hall. The dare pays you along the way.");
+		this.toastT = mode === "start" ? 7 : 5;
 		this.rollDare(true);
 		this.kills = 0;
 		this.streak = 0;
@@ -1492,17 +1482,20 @@ export class Realm {
 		this.heroFallen = [null, null];
 		this.drops = [];
 		this.clearedHomes = [];
-		this.explored = new Uint8Array(MAP_W * MAP_H);
-		this.visible = new Uint8Array(MAP_W * MAP_H);
-		this.applyRich();
-		this.applyDifficulty();
 		this.ensureAudio();
 		this.score.start();
-		this.focusPlayer();
+		this.applyRich();
+		if (mode === "restart" || !this.rpg) this.applyDifficulty();
+		if (mode === "start") {
+			for (const u of this.units) if (u.hp > 0 && (u.level || 1) <= 1 && !(u.gear || []).length) u.hp = this.unitMax(u.kind, u.team);
+		}
 		if (this.rpg) {
 			const hero = this.units.find((u) => u.team === this.playerTeam && u.kind === "hero" && u.hp > 0);
-			if (hero) this.selectedUnits = [hero.id];
+			this.selectedUnits = hero ? [hero.id] : [];
+			this.selectedBuilding = null;
 		}
+		if (mode === "start") this.blip(520, .06, .05);
+		this.focusPlayer();
 		this.emit();
 	}
 	saveKey(slot = 1) {
