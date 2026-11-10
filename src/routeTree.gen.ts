@@ -10,17 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as BountyRouteImport } from './routes/bounty'
 import { Route as StickholdRouteImport } from './routes/stickhold'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BountyRoute = BountyRouteImport.update({
-  id: '/bounty',
-  path: '/bounty',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StickholdRoute = StickholdRouteImport.update({
@@ -31,31 +25,27 @@ const StickholdRoute = StickholdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/bounty': typeof BountyRoute
   '/stickhold': typeof StickholdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/bounty': typeof BountyRoute
   '/stickhold': typeof StickholdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/bounty': typeof BountyRoute
   '/stickhold': typeof StickholdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/bounty' | '/stickhold'
+  fullPaths: '/' | '/stickhold'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/bounty' | '/stickhold'
-  id: '__root__' | '/' | '/bounty' | '/stickhold'
+  to: '/' | '/stickhold'
+  id: '__root__' | '/' | '/stickhold'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  BountyRoute: typeof BountyRoute
   StickholdRoute: typeof StickholdRoute
 }
 
@@ -66,13 +56,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bounty': {
-      id: '/bounty'
-      path: '/bounty'
-      fullPath: '/bounty'
-      preLoaderRoute: typeof BountyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/stickhold': {
@@ -87,7 +70,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  BountyRoute: BountyRoute,
   StickholdRoute: StickholdRoute,
 }
 export const routeTree = rootRouteImport

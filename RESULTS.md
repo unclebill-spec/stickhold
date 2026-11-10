@@ -136,3 +136,29 @@ node --experimental-strip-types --experimental-transform-types --import ./script
 - fail 0
 
 Commit: `40876782e17e06ad9328c0fc49eb7ba7ea70c101`
+
+## Split
+
+Halloween's Bounty is a sibling project. Stickhold no longer imports `bounty-game` or `src/game/bounty`, and `src/routeTree.gen.ts` no longer registers `/bounty`. `/` and `/stickhold` stay. Option C branding stays: `src/lib/og/site.json` title `Stickhold`, the Stickhold favicon, and the win/lose modal. `src/styles.css` was not edited, so the pumpkin, candle, and blood tokens are still defined there. `Realm.bountyFor` in `src/game/engine.ts` is Stickhold kill gold and was not changed. `BUILD_REVIEW.md` still describes the pre-split tree and was not rewritten.
+
+Stickhold path: `/workspace/stickhold-fix-20261110`
+
+Bounty path: `/workspace/halloweens-bounty-split-20261110`
+
+Bounty baseline (its own repo, no remote): `3a55af315266f8d5b24fb486cf0268863c85f467`
+
+Removed from Stickhold: `src/routes/bounty.tsx`, `src/components/bounty-game.tsx`, `src/game/bounty/` (`audio.ts`, `draw.ts`, `sim.ts`, `types.ts`), `halloweens-bounty-prompt.md`, and `halloweens-bounty-prompt.txt`. Those files live in the sibling folder. The sibling README states this is a paper/source split on 2026-11-10. It was not installed, booted, or published.
+
+Test command, after the removal:
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/*.test.ts
+```
+
+The glob is `src/game/realm-lifecycle.test.ts` and `src/game/end-card.test.ts`.
+
+- tests 17
+- pass 17
+- fail 0
+
+Stickhold split commit: filled in by the following commit (this commit cannot name its own hash).
