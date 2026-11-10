@@ -422,10 +422,11 @@ export class Score {
     const ac = this.ac;
     if (!ac || this.hitsReady) return;
     this.hitsReady = (async () => {
+      const base = import.meta.env?.BASE_URL || "/";
       const [chop, pick, build] = await Promise.all([
-        fetch("/sfx/chop.mp3").then((r) => r.arrayBuffer()),
-        fetch("/sfx/pick.mp3").then((r) => r.arrayBuffer()),
-        fetch("/sfx/build.mp3").then((r) => r.arrayBuffer()),
+        fetch(`${base}sfx/chop.mp3`).then((r) => r.arrayBuffer()),
+        fetch(`${base}sfx/pick.mp3`).then((r) => r.arrayBuffer()),
+        fetch(`${base}sfx/build.mp3`).then((r) => r.arrayBuffer()),
       ]);
       const chopBuf = await ac.decodeAudioData(chop);
       const pickBuf = await ac.decodeAudioData(pick);

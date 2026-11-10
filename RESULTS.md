@@ -238,3 +238,64 @@ node --experimental-strip-types --experimental-transform-types --import ./script
 - fail 0
 
 Pre-existing `tsc` errors in `src/game/realm-lifecycle.test.ts` were not fixed in this commit.
+
+## Play HUD
+
+Screenshot fixes only. `src/game/engine.ts` was not edited. `beginMatch`, `start`, `restart`, combat, pathing, and save/load were not changed. `endModalBody` was not changed.
+
+Commit: `bcb38ce3784f94ee666115033657d57a5be6dfe1`
+
+The minimap `style.left` is `8` on the server and on the first client render. A `useEffect` then sets it to `max(8, window.innerWidth - 104)`. `window` is not read in the state that SSR serializes.
+
+The match toast keeps a `7.5rem` right margin and no longer uses `line-clamp-2`, so "Gather wood and food. A dare is waiting under the resources." sits beside the minimap. The word Stickhold in the top bar is `hidden` below the `sm` breakpoint (640px) and `shrink-0` above it, so a 412px screen does not show "Stic...". At 1280px the full word is visible.
+
+Checked in headless Chromium against the already-running dev server at `http://127.0.0.1:4650/` (412x915 and 1280x800) and `http://127.0.0.1:4650/stickhold` (1280x800). No hydration console error. The toast box did not overlap the minimap. The phone title was hidden. The wide title was "Stickhold". That server was left running.
+
+Test command, green before this commit:
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/*.test.ts src/components/*.test.ts
+```
+
+- tests 22
+- pass 22
+- fail 0
+
+## Static Pages build
+
+`npm run build` writes a client-only site to `dist/` (gitignored, not committed). `vite.config.ts` is still the TanStack Start dev server with the Nitro `vercel` preset, used by `npm run dev`, `npm run build:dev`, and `npm run preview`. That path is a server deploy. The Pages command does not use it.
+
+`npm run build` is:
+
+```
+VITE_AUTH_ENABLED=false node scripts/with-app-env.mjs vite build --config vite.static.config.ts
+```
+
+Vite `base` is `/stickhold/`. Output directory is `dist/`. The built `dist/index.html` loads `/stickhold/assets/index-CDXrzla0.js` and `/stickhold/assets/index-BFfmhEsc.css`, and the favicon is `/stickhold/favicon.svg`. `dist/404.html` is a byte copy of `index.html` for the GitHub Pages SPA fallback. Asset hashes will change on the next build.
+
+The static entry is `src/static-main.tsx`. It mounts the existing `Stickhold` component. TanStack Router `basepath` is `/stickhold`. `/` and `/stickhold` both render the game, so `/stickhold/` and `/stickhold/stickhold` both play. Any other path under that base uses the same component. Chop, pick, and build samples are fetched from `${import.meta.env.BASE_URL}sfx/...`, which is `/sfx/...` when the base is `/` and `/stickhold/sfx/...` in this build. That is the only edit in `src/game/audio.ts`.
+
+Auth stays off. The build script sets `VITE_AUTH_ENABLED=false`. `.grok/app-env.json` is only that flag, so the existing env wrapper agrees. The omitted `.grok/` tree was not copied. The static bundle does not import the auth client. A search of `dist/assets/*.js` found no `VITE_AUTH`, `local-stub`, `better-auth`, or `/api/auth`. No secrets were added. `npm run db:migrate` is unchanged and is no longer chained after `npm run build`.
+
+Preview, then stopped (port 4673 is closed; port 4650 was not touched):
+
+```
+npx vite preview --config vite.static.config.ts --host 127.0.0.1 --port 4673 --strictPort
+```
+
+- `GET /stickhold/` 200
+- `GET /stickhold/stickhold` 200
+- `GET /stickhold/assets/index-CDXrzla0.js` 200
+- `GET /stickhold/sfx/chop.mp3` 200
+
+Headless Chromium loaded both URLs, started a skirmish, and showed the full gather toast clear of the minimap. Nothing was published. `games.conf` was not edited.
+
+Same test command after the audio path change:
+
+- tests 22
+- pass 22
+- fail 0
+
+`tsc --noEmit` still reports the pre-existing errors in `src/game/realm-lifecycle.test.ts` only.
+
+Pages commit: recorded in the follow-up.
