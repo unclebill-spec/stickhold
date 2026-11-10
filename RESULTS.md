@@ -52,7 +52,7 @@ Same command, after the coverage tests:
 - pass 12
 - fail 0
 
-Commit: filled in by the next commit (this coverage commit cannot name its own hash).
+Commit: `c54c80241bc9f6d7b4397f855ff884a2b6f7c5ee`
 
 ### Item 4 — Tale `rpgFate`
 
@@ -111,4 +111,28 @@ No split commit. `src/game/engine.ts` stays one class.
 
 ## Option C
 
-Not started.
+The win/lose modal reads the engine ending toast when that toast is one of the five ending sentences. Otherwise it branches on `rpg`. A Tale victory uses `"Your people are home. The wild is yours."` or `"The wild is clear. The champion stands."`, not `"Their hall is down."` A Tale loss through `reap()` still shows `"Your town hall is lost."` when that is the toast. A Tale loss through `rpgFate` shows `"The champion is gone, and the altar with them."` Skirmish keeps `"Their hall has fallen."` / `"Your town hall is lost."` when those toasts are set, and the older modal sentences when the toast is empty or mid-match.
+
+`endModalBody` lives in `src/game/end-card.ts` and `src/components/stickhold.tsx` calls it. No React render. `src/lib/og/site.json` title is `Stickhold`; `type` and `card` are unchanged. `public/favicon.svg` is an original three-post mark in `#2a5bd7` on `#0c1218`. It does not contain `#e07a2f`. `/bounty`, `src/game/bounty/`, `src/routes/bounty.tsx`, `src/components/bounty-game.tsx`, and the Halloween prompt files were not edited. Route titles and `APP_NAME` were already Stickhold and were not edited. `src/styles.css` was not edited.
+
+Option C command:
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/end-card.test.ts
+```
+
+- tests 5
+- pass 5
+- fail 0
+
+Full headless suite (lifecycle plus end card):
+
+```
+node --experimental-strip-types --experimental-transform-types --import ./scripts/ts-ext-register.mjs --test src/game/realm-lifecycle.test.ts src/game/end-card.test.ts
+```
+
+- tests 17
+- pass 17
+- fail 0
+
+Commit: filled in by the following commit (this commit cannot name its own hash).

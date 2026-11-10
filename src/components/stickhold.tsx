@@ -14,6 +14,7 @@ import {
   Wheat,
 } from "lucide-react";
 import { drawRealm } from "@/game/draw";
+import { endModalBody } from "@/game/end-card";
 import { Realm, realmApi, type CmdId, type Controls, type Snap } from "@/game/engine";
 
 function speedName(v: number) {
@@ -790,11 +791,7 @@ export function Stickhold() {
         <div className="absolute inset-0 z-40 flex items-center justify-center overflow-y-auto bg-ink/45 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="w-full max-w-sm rounded-panel bg-parchment p-5 text-center shadow-sm">
             <h2 className="font-display text-3xl font-semibold">{phase === "win" ? "You won" : "You lost"}</h2>
-            <p className="mt-2 text-sm text-muted">
-              {phase === "win"
-                ? "Their hall is down."
-                : "They took your hall. A tower and a few soldiers help hold the crossing."}
-            </p>
+            <p className="mt-2 text-sm text-muted">{endModalBody(phase, snap?.toast ?? "", !!snap?.rpg)}</p>
             <p className="mt-1 text-sm font-semibold tabular-nums">{fmt(snap?.time ?? 0)}</p>
             <button
               type="button"
